@@ -1,5 +1,71 @@
 
+import qualified Data.ByteString.Lazy.Char8 as L
+import qualified Data.ByteString.Char8 as C
+
+main  = do
+          content <- L.getContents 
+          let linesOfFile = L.lines content
+          let l1 = [(L.split ',') lineOfFile | lineOfFile <- linesOfFile]
+          let l2 = [process lineOfFile | lineOfFile <- l1]
+          let outputLines = [putStr y | y <- l2]
+          seqn outputLines
+
+seqn :: [IO a] -> IO ()
+seqn [] = return ()
+seqn (x : xs) = do
+                  x; putChar '\n'
+                  seqn xs
+
+process :: [L.ByteString] -> [Char]
+process [] = "None"
+process lst = if cnt > hlf then (show maj) else "None"
+	            where
+                (maj,cnt) = findMajCandidate lst 0 0 0
+                hlf = (length lst) `div` 2
+
+findMajCandidate :: [L.ByteString] -> Int -> Int -> Int -> (Int,Int)
+findMajCandidate [] _ m cnt = (m,cnt)
+findMajCandidate (s:ss) c m cnt 
+  | num == m = findMajCandidate ns (c + 1) m (cnt + 1)
+	| c == 0 = findMajCandidate ns 1 num (cnt + 1)
+  | otherwise = findMajCandidate ns (c - 1) m (cnt + 1)
+  where
+    case L.readInt s of
+      Nothing -> error "hi"
+      Just (num,_) -> num
+
+{-
+main  = do
+ content <- getContents
+ let linesOfFile = lines content
+ let l1 = [proc (read lineOfFile::Int) | lineOfFile <- linesOfFile]
+ let outputLines = [putStr y | y <- l1]
+ seqn outputLines
+
+seqn :: [IO a] -> IO ()
+seqn [] = return ()
+seqn (x : xs) = do
+  x; putChar '\n'
+  seqn xs
+	
+agePlace =[([0..2],"Home")
+			    ,([3,4],"Preschool")
+			    ,([5..11],"Elementary school")
+			    ,([12..14],"Middle school")
+			    ,([15..18],"High school")
+			    ,([19..22],"College")
+					,([23..65],"Work")
+					,([66..100],"Retirement")]
+
+proc :: Int -> String
+proc a = procRec agePlace a 
+
+procRec :: [([Int],String)] -> Int -> String
+procRec [] _ = "This program is for humans"
+procRec ((ints,s):rest) a = if a `elem` ints then s else procRec rest a
+
 import qualified Data.Map as Map
+
 
 queryBoard :: Map.Map (Int,Int) Int
 queryBoard = Map.fromList [((i,j),0) | i <- [0..boardUB], j <-[0..boardUB]]
@@ -27,7 +93,6 @@ setRowCol :: Map.Map (Int,Int) Int -> [(Int,Int)] -> Int -> Map.Map (Int,Int) In
 setRowCol mp [] _ = mp
 setRowCol mp ((i,j):rest) val = setRowCol (Map.adjust (\_ -> val) (i,j) mp) rest val
 
-{-
 import Data.Array
 import qualified Data.Map as Map
 import Data.List (insert)
@@ -512,7 +577,6 @@ hsl2rgb (h,s',l') = (round $ 255 * (r1 + m), round $ 255 * (g1 + m), round $ 255
 
 cmyk2rgb :: (Double,Double,Double,Double) -> (Int,Int,Int)
 cmyk2rgb (c,m,y,k) = (round $ 255 * (1 - c) * (1 - k), round $ 255 * (1 - m) * (1 - k), round $ 255 * (1 - y) * (1 - k))
-{
 import Data.Array
 
 lst :: Int -> [Int]
@@ -560,8 +624,6 @@ split (x:xs) delim
 
 mis :: Int -> [Int] -> Int
 mis n lst = n - 1 + sum lst - (n * (n - 1)) `div` 2
--}
-{-
 import Data.Array
 
 main  = do
@@ -584,8 +646,6 @@ rep (c:cs)  | c == ' ' = ' ' : rep cs
 			
 arr :: Array Char Char
 arr = listArray ('a','z') ['y','h','e','s','o','c','v','x','d','u','i','g','l','b','k','r','z','t','n','w','j','p','f','m','a','q'] 
--}
-{-
 import Data.List
  
 qsort [] = []
@@ -608,8 +668,6 @@ binarySearch p (low,high)
         GT -> binarySearch p (mid+1, high)
         EQ -> Just mid
 
--}
-{-
 main  = do
 			content <- getContents
 			let linesOfFile = lines content
@@ -785,9 +843,6 @@ dec (c:cs)  | cE >= aE && cE <= jE = (arr ! c) : dec cs
 
 -- file: ch16/csv2.hs
 parseCSV input = parse csvFile "(unknown)" input
--}
-
-{-
 import Data.Array
 
 major ns| (ds ! 1) == (ds ! ((l `div` 2) + 1)) = show (ds ! 1)
@@ -1047,10 +1102,8 @@ split (x:xs) delim
 
 digits :: Map.Map [Char] Char
 digits = Map.fromList [ ( "zero" , '0' ) , ( "one" , '1' ) , ( "two" , '2' ) , ( "three" , '3' ) , ( "four" , '4' ) , ( "five" , '5' ) , ( "six" , '6' ) , ( "seven" , '7' ) , ( "eight" , '8' ) , ( "nine" , '9' )]
--}
 
 
-{-
 main  = do
 			inpStr <- getContents
 			let l1 = foldl (\pre cur -> maximizeRow pre (map (\x -> read x::Int) (words cur)) 0) [] (lines inpStr)
@@ -1073,8 +1126,6 @@ maximizeRows r (r1:rs) = maximizeRows (maximizeRow r r1 0) rs
 maximizeRow :: [Int] -> [Int] -> Int -> [Int]
 maximizeRow [] cur n = [head cur + n]
 maximizeRow (p:ps) (c:cs) n = (max (n + c) (p + c)) : (maximizeRow ps cs p)
--}
-{-
 main  = do
 			content <- getContents
 			let linesofFile = lines content
@@ -1093,8 +1144,6 @@ countDec [] = 0
 countDec [c] = 1
 countDec [c1,c2] = if (read [c1,c2]::Int) > 26 then 1 else 2
 countDec (c1:c2:cs) = if (read [c1,c2]::Int) > 26 then countDec (c2:cs) else (countDec cs) + (countDec $ c2:cs)
--}
-{-
 import Data.Array
 import qualified Data.Map as Map
 import Control.Monad.Fix
@@ -1146,8 +1195,6 @@ calcMin f l	| i == n - 1 && j == n - 1= testData4 ! (i,j)
 --calcMinMemoized :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 --calcMinMemoized n arr i j
 
--}
-{-
 calcMin xs ys = a!(0,0)
 	where
 		n = length xs
@@ -1159,13 +1206,9 @@ calcMin xs ys = a!(0,0)
 		f x y i j 
 			| x == y    = x : a!(i+1,j+1)
 			| otherwise = maxl (a!(i,j+1)) (a!(i+1,j))
--}
-
 
 --calcMinMemoized :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 --calcMinMemoized n arr i j = (Map.fromList [(coord, calcMin calcMinMemoized n arr (fst coord) (snd coord)) | coord <- reverse $ range ((0,0),(n-1,n-1))]) Map.! (i,j)
-
-{-
 
 calcMin :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 calcMin n arr i j 	| i == n - 1 && j == n - 1= arr ! (i,j)
@@ -1224,32 +1267,6 @@ extractDigitsRevRecur :: Int -> [Int]
 extractDigitsRevRecur 0 = []
 extractDigitsRevRecur n = (n `mod` 10) : (extractDigitsRevRecur (n `div` 10))
 
-{-
-memoized_minSum :: Int -> Int -> Int -> Int
-memoized_minSum n i j = (map minSum [0 ..] !!)
-   where minSum  n i j 	| i == n - 1 && j == n - 1	= testData ! (i,j)
-						| i == n - 1				= testData ! (i,j) + memoized_minSum 
-				|               j == n - 1	= do
-												mem <- minSum arr n (i + 1) j
-												return (arr ! (i,j) + mem)
-				| otherwise					= do
-												mem1 <- minSum arr n i (j + 1)
-												mem2 <- minSum arr n (i + 1) j
-												return (arr ! (i,j) + min mem1 mem2)
--}
-
---calcAll :: Int -> [Int] -> Int
---calcAll n ds = min (calcMin) ()head [calcMin n arr mp (fst coord) (snd coord) | coord <- reverse $ range ((0,0),(n-1,n-1))]
---				where
---					arr = matrix n ds
-
---calcMin :: Int -> Array (Int, Int) Int -> Map.Map (Int,Int) Int -> Int -> Int -> Map.Map (Int,Int) Int
---calcMin n arr mp i j | i == n - 1 && j == n -1 = Map.insert (i,j) (arr ! (i,j)) mp
---					 | i == n - 1              = Map.insert (i,j) (arr ! (i,j) + mp Map.! (i,j+1)) mp
---					 |              j == n - 1 = Map.insert (i,j) (arr ! (i,j) + mp Map.! (i+1,j)) mp
---					 | otherwise			   = Map.insert (i,j) (arr ! (i,j) + min (mp Map.! (i,j+1)) (mp Map.! (i+1,j))) mp
--}
-{-
 import Data.Array
 
 val :: Array (Int,Int) Char
@@ -1520,8 +1537,6 @@ gwstore str1 str2 = [[1]]
 
 fastgw :: [Char] -> [Char] -> [Char] -> [Char] -> Int
 fastgw str1 str2 x y = (gwstore str1 str2) !! (length x) !! (length y)
--}
-{-
 import Control.Monad.Fix
 
 longestCommon :: ([Char] -> [Char] -> Int) -> [Char] -> [Char] -> Int
@@ -1554,8 +1569,6 @@ lststore = memoize lst
 
 fastlst :: [Char] -> [Char] -> Int
 fastlst x y = lststore !! x !! y
--}
-{-
 longestCommonMemo :: Int -> Integer
 longestCommonMemo = fix (memoize . longestCommon)
 
@@ -2491,8 +2504,6 @@ getSibling (i",j) b colCount rowCount| i < 0 || j < 0 = []
 --findNeighbor _ _ [] = []
 --findNeighbor (i",j) c (row:rows)
 
--}
-{-
 import qualified Data.Map as Map
 
 main  = do
@@ -2837,7 +2848,6 @@ hsl2rgb (h,s',l') = (round $ 255 * (r1 + m), round $ 255 * (g1 + m), round $ 255
 
 cmyk2rgb :: (Double,Double,Double,Double) -> (Int,Int,Int)
 cmyk2rgb (c,m,y,k) = (round $ 255 * (1 - c) * (1 - k), round $ 255 * (1 - m) * (1 - k), round $ 255 * (1 - y) * (1 - k))
-{
 import Data.Array
 
 lst :: Int -> [Int]
@@ -2885,8 +2895,6 @@ split (x:xs) delim
 
 mis :: Int -> [Int] -> Int
 mis n lst = n - 1 + sum lst - (n * (n - 1)) `div` 2
--}
-{-
 import Data.Array
 
 main  = do
@@ -2909,8 +2917,6 @@ rep (c:cs)  | c == ' ' = ' ' : rep cs
 			
 arr :: Array Char Char
 arr = listArray ('a','z') ['y','h','e','s','o','c','v','x','d','u','i','g','l','b','k','r','z','t','n','w','j','p','f','m','a','q'] 
--}
-{-
 import Data.List
  
 qsort [] = []
@@ -2933,8 +2939,6 @@ binarySearch p (low,high)
         GT -> binarySearch p (mid+1, high)
         EQ -> Just mid
 
--}
-{-
 main  = do
 			content <- getContents
 			let linesOfFile = lines content
@@ -3110,9 +3114,7 @@ dec (c:cs)  | cE >= aE && cE <= jE = (arr ! c) : dec cs
 
 -- file: ch16/csv2.hs
 parseCSV input = parse csvFile "(unknown)" input
--}
 
-{-
 import Data.Array
 
 major ns| (ds ! 1) == (ds ! ((l `div` 2) + 1)) = show (ds ! 1)
@@ -3372,10 +3374,8 @@ split (x:xs) delim
 
 digits :: Map.Map [Char] Char
 digits = Map.fromList [ ( "zero" , '0' ) , ( "one" , '1' ) , ( "two" , '2' ) , ( "three" , '3' ) , ( "four" , '4' ) , ( "five" , '5' ) , ( "six" , '6' ) , ( "seven" , '7' ) , ( "eight" , '8' ) , ( "nine" , '9' )]
--}
 
 
-{-
 main  = do
 			inpStr <- getContents
 			let l1 = foldl (\pre cur -> maximizeRow pre (map (\x -> read x::Int) (words cur)) 0) [] (lines inpStr)
@@ -3398,8 +3398,6 @@ maximizeRows r (r1:rs) = maximizeRows (maximizeRow r r1 0) rs
 maximizeRow :: [Int] -> [Int] -> Int -> [Int]
 maximizeRow [] cur n = [head cur + n]
 maximizeRow (p:ps) (c:cs) n = (max (n + c) (p + c)) : (maximizeRow ps cs p)
--}
-{-
 main  = do
 			content <- getContents
 			let linesofFile = lines content
@@ -3418,8 +3416,6 @@ countDec [] = 0
 countDec [c] = 1
 countDec [c1,c2] = if (read [c1,c2]::Int) > 26 then 1 else 2
 countDec (c1:c2:cs) = if (read [c1,c2]::Int) > 26 then countDec (c2:cs) else (countDec cs) + (countDec $ c2:cs)
--}
-{-
 import Data.Array
 import qualified Data.Map as Map
 import Control.Monad.Fix
@@ -3471,8 +3467,6 @@ calcMin f l	| i == n - 1 && j == n - 1= testData4 ! (i,j)
 --calcMinMemoized :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 --calcMinMemoized n arr i j
 
--}
-{-
 calcMin xs ys = a!(0,0)
 	where
 		n = length xs
@@ -3484,13 +3478,11 @@ calcMin xs ys = a!(0,0)
 		f x y i j 
 			| x == y    = x : a!(i+1,j+1)
 			| otherwise = maxl (a!(i,j+1)) (a!(i+1,j))
--}
 
 
 --calcMinMemoized :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 --calcMinMemoized n arr i j = (Map.fromList [(coord, calcMin calcMinMemoized n arr (fst coord) (snd coord)) | coord <- reverse $ range ((0,0),(n-1,n-1))]) Map.! (i,j)
 
-{-
 
 calcMin :: Int -> Array (Int, Int) Int -> Int -> Int -> Int
 calcMin n arr i j 	| i == n - 1 && j == n - 1= arr ! (i,j)
@@ -3549,7 +3541,6 @@ extractDigitsRevRecur :: Int -> [Int]
 extractDigitsRevRecur 0 = []
 extractDigitsRevRecur n = (n `mod` 10) : (extractDigitsRevRecur (n `div` 10))
 
-{-
 memoized_minSum :: Int -> Int -> Int -> Int
 memoized_minSum n i j = (map minSum [0 ..] !!)
    where minSum  n i j 	| i == n - 1 && j == n - 1	= testData ! (i,j)
@@ -3561,8 +3552,6 @@ memoized_minSum n i j = (map minSum [0 ..] !!)
 												mem1 <- minSum arr n i (j + 1)
 												mem2 <- minSum arr n (i + 1) j
 												return (arr ! (i,j) + min mem1 mem2)
--}
-
 --calcAll :: Int -> [Int] -> Int
 --calcAll n ds = min (calcMin) ()head [calcMin n arr mp (fst coord) (snd coord) | coord <- reverse $ range ((0,0),(n-1,n-1))]
 --				where
@@ -3573,8 +3562,6 @@ memoized_minSum n i j = (map minSum [0 ..] !!)
 --					 | i == n - 1              = Map.insert (i,j) (arr ! (i,j) + mp Map.! (i,j+1)) mp
 --					 |              j == n - 1 = Map.insert (i,j) (arr ! (i,j) + mp Map.! (i+1,j)) mp
 --					 | otherwise			   = Map.insert (i,j) (arr ! (i,j) + min (mp Map.! (i,j+1)) (mp Map.! (i+1,j))) mp
--}
-{-
 import Data.Array
 
 val :: Array (Int,Int) Char
@@ -3845,8 +3832,6 @@ gwstore str1 str2 = [[1]]
 
 fastgw :: [Char] -> [Char] -> [Char] -> [Char] -> Int
 fastgw str1 str2 x y = (gwstore str1 str2) !! (length x) !! (length y)
--}
-{-
 import Control.Monad.Fix
 
 longestCommon :: ([Char] -> [Char] -> Int) -> [Char] -> [Char] -> Int
@@ -3879,8 +3864,6 @@ lststore = memoize lst
 
 fastlst :: [Char] -> [Char] -> Int
 fastlst x y = lststore !! x !! y
--}
-{-
 longestCommonMemo :: Int -> Integer
 longestCommonMemo = fix (memoize . longestCommon)
 
