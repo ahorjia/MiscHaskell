@@ -1,0 +1,89 @@
+chapter: Haskell
+==================
+data Person = Person Text Int
+    
+    
+====================================
+sudo apt-get install libedit-dev libbsd-dev libgmp3-dev zlib1g-dev freeglut3-dev
+    
+    
+====================================
+{-# LANGUAGE MyLanguageExtension #-}
+    
+    
+====================================
+class IsString a where
+    fromString :: String -> a
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
+import Data.Text (Text)
+
+class DoSomething a where
+    something :: a -> IO ()
+
+instance DoSomething String where
+    something _ = putStrLn "String"
+
+instance DoSomething Text where
+    something _ = putStrLn "Text"
+
+myFunc :: IO ()
+myFunc = something "hello"
+    
+    
+====================================
+{-# LANGUAGE TypeFamilies, OverloadedStrings #-}
+import Data.Word (Word8)
+import qualified Data.ByteString as S
+import Data.ByteString.Char8 () -- get an orphan IsString instance
+
+class SafeHead a where
+    type Content a
+    safeHead :: a -> Maybe (Content a)
+
+instance SafeHead [a] where
+    type Content [a] = a
+    safeHead [] = Nothing
+    safeHead (x:_) = Just x
+
+instance SafeHead S.ByteString where
+    type Content S.ByteString = Word8
+    safeHead bs
+        | S.null bs = Nothing
+        | otherwise = Just $ S.head bs
+
+main :: IO ()
+main = do
+    print $ safeHead ("" :: String)
+    print $ safeHead ("hello" :: String)
+
+    print $ safeHead ("" :: S.ByteString)
+    print $ safeHead ("hello" :: S.ByteString)
+    
+    
+====================================
+$(hamletFile "myfile.hamlet")
+    
+    
+====================================
+{-# LANGUAGE TemplateHaskell #-}
+
+-- Normal function declaration, nothing special
+myFunction = ...
+
+-- Include some TH code
+$(myThCode)
+
+-- Or equivalently
+myThCode
+    
+    
+====================================
+{-# LANGUAGE QuasiQuotes #-}
+
+[hamlet|<p>This is quasi-quoted Hamlet.|]
+    
+    
+==================

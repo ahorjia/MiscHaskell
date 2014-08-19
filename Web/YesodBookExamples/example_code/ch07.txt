@@ -1,0 +1,74 @@
+chapter: Routing and Handlers
+==================
+/             RootR     GET
+/blog         BlogR     GET POST
+/blog/#BlogId BlogPostR GET POST
+
+/static       StaticR   Static getStatic
+    
+    
+====================================
+toPieces "/" = []
+toPieces "/foo/bar/baz/" = ["foo", "bar", "baz", ""]
+    
+    
+====================================
+newtype Natural = Natural Int
+instance PathPiece Natural where
+    toPathPiece (Natural i) = T.pack $ show i
+    fromPathPiece s =
+        case reads $ T.unpack s of
+            (i, ""):_
+                | i < 1 -> Nothing
+                | otherwise -> Just $ Natural i
+            [] -> Nothing
+    
+    
+====================================
+data Page = Page Text Text [Text] -- 2 or more
+instance PathMultiPiece Page where
+    toPathMultiPiece (Page x y z) = x : y : z
+    fromPathMultiPiece (x:y:z) = Just $ Page x y z
+    fromPathMultiPiece _ = Nothing
+    
+    
+====================================
+data MyRoute = PersonR Text
+             | YearR Int
+             | FaqR
+    
+    
+====================================
+/static StaticR Static getStatic
+    
+    
+====================================
+mkYesod "Simple" [parseRoutes|
+/ HomeR GET
+|]
+
+getHomeR :: Handler RepHtml
+getHomeR = defaultLayout [whamlet|<h1>This is simple
+|]
+    
+    
+====================================
+mkYesod "Args" [parseRoutes|
+/person/#Text PersonR GET
+/year/#Integer/month/#Text/day/#Int DateR
+/wiki/*Texts WikiR GET
+|]
+
+getPersonR :: Text -> Handler RepHtml
+getPersonR name = defaultLayout [whamlet|<h1>Hello #{name}!|]
+
+handleDateR :: Integer -> Text -> Int -> Handler RepPlain -- text/plain
+handleDateR year month day =
+    return $ RepPlain $ toContent $
+        T.concat [month, " ", T.pack $ show day, ", ", T.pack $ show year]
+
+getWikiR :: [Text] -> Handler RepPlain
+getWikiR = return . RepPlain . toContent . T.unwords
+    
+    
+==================

@@ -1,0 +1,146 @@
+chapter: Deploying Your Webapp
+==================
+cabal clean && cabal configure && cabal build
+    
+    
+====================================
+daemon off; # Don't run nginx in the background, good for monitoring apps
+events {
+    worker_connections 4096;
+}
+
+http {
+    server {
+        listen 80; # Incoming port for Nginx
+        server_name www.myserver.com;
+        location / {
+            proxy_pass http://127.0.0.1:4321; # Reverse proxy to your Yesod app
+        }
+    }
+}
+    
+    
+====================================
+server {
+    listen 80;
+    server_name myserver.com;
+    rewrite ^/(.*) http://www.myserver.com/$1 permanent;
+}
+    
+    
+====================================
+server {
+    listen 80;
+    server_name static.myserver.com;
+    root /home/michael/sites/mysite/static;
+    # Since yesod-static appends a content hash in the query string,
+    # we are free to set expiration dates far in the future without
+    # concerns of stale content.
+    expires max;
+}
+    
+    
+====================================
+server {
+    listen 80; # Incoming port for Nginx
+    server_name www.myserver.com;
+    location / {
+        proxy_pass http://127.0.0.1:4321; # Reverse proxy to your Yesod app
+    }
+    location /static {
+        root /home/michael/sites/mysite; # Notice that we do *not* include /static
+        expires max;
+    }
+}
+    
+    
+====================================
+description "My awesome Yesod application"
+start on runlevel [2345];
+stop on runlevel [!2345];
+respawn
+chdir /home/michael/sites/mysite
+exec /home/michael/sites/mysite/dist/build/mysite/mysite
+    
+    
+====================================
+spawn-fcgi \
+    -d /home/michael/sites/mysite \
+    -s /tmp/mysite.socket \
+    -n \
+    -M 511 \
+    -u michael \
+    -- /home/michael/sites/mysite/dist/build/mysite-fastcgi/mysite-fastcgi
+    
+    
+====================================
+server {
+    listen 80;
+    server_name www.myserver.com;
+    location / {
+        fastcgi_pass unix:/tmp/mysite.socket;
+    }
+}
+    
+    
+====================================
+fastcgi_param  QUERY_STRING       $query_string;
+fastcgi_param  REQUEST_METHOD     $request_method;
+fastcgi_param  CONTENT_TYPE       $content_type;
+fastcgi_param  CONTENT_LENGTH     $content_length;
+fastcgi_param  PATH_INFO          $fastcgi_script_name;
+fastcgi_param  SERVER_PROTOCOL    $server_protocol;
+fastcgi_param  GATEWAY_INTERFACE  CGI/1.1;
+fastcgi_param  SERVER_SOFTWARE    nginx/$nginx_version;
+fastcgi_param  REMOTE_ADDR        $remote_addr;
+fastcgi_param  SERVER_ADDR        $server_addr;
+fastcgi_param  SERVER_PORT        $server_port;
+fastcgi_param  SERVER_NAME        $server_name;
+    
+    
+====================================
+Options +ExecCGI
+AddHandler cgi-script .cgi
+Options +FollowSymlinks
+
+RewriteEngine On
+RewriteRule ^/f5/snoyman/public/blog$ /blog/ [R=301,S=1]
+RewriteCond $1 !^bloggy.cgi
+RewriteCond $1 !^static/
+RewriteRule ^(.*) bloggy.cgi/$1 [L]
+    
+    
+====================================
+server.port = 3000
+server.document-root = "/home/michael"
+server.modules = ("mod_fastcgi", "mod_rewrite")
+
+url.rewrite-once = (
+  "(.*)" => "/app/$1"
+)
+
+fastcgi.server = (
+    "/app" => ((
+        "socket" => "/tmp/test.fastcgi.socket",
+        "check-local" => "disable",
+        "bin-path" => "/home/michael/fastcgi", # full path to executable
+        "min-procs" => 1,
+        "max-procs" => 30,
+        "idle-timeout" => 30
+    ))
+)
+    
+    
+====================================
+server.port = 3000
+server.document-root = "/home/michael"
+server.modules = ("mod_cgi", "mod_rewrite")
+
+url.rewrite-once = (
+    "(.*)" => "/myapp.cgi/$1"
+)
+
+cgi.assign = (".cgi" => "")
+    
+    
+==================

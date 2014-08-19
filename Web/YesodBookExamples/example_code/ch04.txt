@@ -1,0 +1,403 @@
+chapter: Shakespearean Templates
+==================
+$doctype 5
+<html>
+    <head>
+        <title>#{pageTitle} - My Site
+        <link rel=stylesheet href=@{Stylesheet}>
+    <body>
+        <h1 .page-title>#{pageTitle}
+        <p>Here is a list of your friends:
+        $if null friends
+            <p>Sorry, I lied, you don't have any friends.
+        $else
+            <ul>
+                $forall Friend name age <- friends
+                    <li>#{name} (#{age} years old)
+        <footer>^{copyright}
+    
+    
+====================================
+#myid
+    color: #{red}
+    font-size: #{bodyFontSize}
+foo bar baz
+    background-image: url(@{MyBackgroundR})
+    
+    
+====================================
+section.blog {
+    padding: 1em;
+    border: 1px solid #000;
+    h1 {
+        color: #{headingColor};
+    }
+}
+    
+    
+====================================
+$(function(){
+    $("section.#{sectionClass}").hide();
+    $("#mybutton").click(function(){document.location = "@{SomeRouteR}";});
+    ^{addBling}
+});
+    
+    
+====================================
+<p>Hello, my name is #{name}
+    
+    
+====================================
+data MyRoute = Home | Time
+    
+    
+====================================
+renderMyRoute :: MyRoute -> Text
+renderMyRoute Home = "http://example.com/profile/home"
+renderMyRoute Time = "http://example.com/display/time"
+    
+    
+====================================
+type Query = [(Text, Text)]
+type Render url = url -> Query -> Text
+renderMyRoute :: Render MyRoute
+renderMyRoute Home _ = ...
+renderMyRoute Time _ = ...
+    
+    
+====================================
+<a href=@{Time}>The time
+    
+    
+====================================
+\render -> mconcat ["<a href='", render Time, "'>The time</a>"]
+    
+    
+====================================
+<body>
+<p>Some paragraph.</p>
+<ul>
+<li>Item 1</li>
+<li>Item 2</li>
+</ul>
+</body>
+    
+    
+====================================
+<body>
+    <p>Some paragraph.
+    <ul>
+        <li>Item 1
+        <li>Item 2
+    
+    
+====================================
+<p>Paragraph <i>italic</i> end.</p>
+    
+    
+====================================
+<p>
+    Paragraph #
+    <i>italic
+    \ end.
+    
+    
+====================================
+<p>Paragraph <i>italic</i> end.
+    
+    
+====================================
+<head>
+    <title>#{title}
+    
+    
+====================================
+-- Just ignore the quasiquote stuff for now, and that shamlet thing.
+-- It will be explained later.
+{-# LANGUAGE QuasiQuotes #-}
+import Text.Hamlet (shamlet)
+import Text.Blaze.Renderer.String (renderHtml)
+import Data.Char (toLower)
+import Data.List (sort)
+
+data Person = Person
+    { name :: String
+    , age  :: Int
+    }
+
+main :: IO ()
+main = putStrLn $ renderHtml [shamlet|
+<p>Hello, my name is #{name person} and I am #{show $ age person}.
+<p>
+    Let's do some funny stuff with my name: #
+    <b>#{sort $ map toLower (name person)}
+<p>Oh, and in 5 years I'll be #{show (5 + (age person))} years old.
+|]
+  where
+    person = Person "Michael" 26
+    
+    
+====================================
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
+import Text.Hamlet (HtmlUrl, hamlet)
+import Text.Blaze.Renderer.String (renderHtml)
+import Data.Text (Text)
+
+data MyRoute = Home
+
+render :: MyRoute -> [(Text, Text)] -> Text
+render Home _ = "/home"
+
+footer :: HtmlUrl MyRoute
+footer = [hamlet|
+<footer>
+    Return to #
+    <a href=@{Home}>Homepage
+    .
+|]
+
+main :: IO ()
+main = putStrLn $ renderHtml $ [hamlet|
+<body>
+    <p>This is my page.
+    ^{footer}
+|] render
+    
+    
+====================================
+$if isAdmin
+    <p>Welcome to the admin section.
+$elseif isLoggedIn
+    <p>You are not the administrator.
+$else
+    <p>I don't know who you are. Please log in so I can decide if you get access.
+    
+    
+====================================
+$maybe name <- maybeName
+    <p>Your name is #{name}
+$nothing
+    <p>I don't know your name.
+    
+    
+====================================
+$maybe Person firstName lastName <- maybePerson
+    <p>Your name is #{firstName} #{lastName}
+    
+    
+====================================
+$if null people
+    <p>No people.
+$else
+    <ul>
+        $forall person <- people
+            <li>#{person}
+    
+    
+====================================
+$case foo
+    $of Left bar
+        <p>It was left: #{bar}
+    $of Right baz
+        <p>It was right: #{baz}
+    
+    
+====================================
+$with foo <- some very (long ugly) expression that $ should only $ happen once
+    <p>But I'm going to use #{foo} multiple times. #{foo}
+    
+    
+====================================
+$doctype 5
+<html>
+    <head>
+        <title>Hamlet is Awesome
+    <body>
+        <p>All done.
+    
+    
+====================================
+#banner
+    border: 1px solid #{bannerColor}
+    background-image: url(@{BannerImageR})
+    
+    
+====================================
+article code { background-color: grey; }
+article p { text-indent: 2em; }
+article a { text-decoration: none; }
+    
+    
+====================================
+article {
+    code { background-color: grey; }
+    p { text-indent: 2em; }
+    a { text-decoration: none; }
+}
+    
+    
+====================================
+@textcolor: #ccc; /* just because we hate our users */
+body { color: #{textcolor} }
+a:link, a:visited { color: #{textcolor} }
+    
+    
+====================================
+Example: Quasiquoter
+
+{-# LANGUAGE OverloadedStrings #-} -- we're using Text below
+{-# LANGUAGE QuasiQuotes #-}
+import Text.Hamlet (HtmlUrl, hamlet)
+import Data.Text (Text)
+import Text.Blaze.Renderer.String (renderHtml)
+
+data MyRoute = Home | Time | Stylesheet
+
+render :: MyRoute -> [(Text, Text)] -> Text
+render Home _ = "/home"
+render Time _ = "/time"
+render Stylesheet _ = "/style.css"
+
+template :: Text -> HtmlUrl MyRoute
+template title = [hamlet|
+$doctype 5
+<html>
+    <head>
+        <title>#{title}
+        <link rel=stylesheet href=@{Stylesheet}>
+    <body>
+        <h1>#{title}
+|]
+
+main :: IO ()
+main = putStrLn $ renderHtml $ template "My Title" render
+    
+    
+====================================
+Example: External file
+
+{-# LANGUAGE OverloadedStrings #-} -- we're using Text below
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE CPP #-} -- to control production versus debug
+import Text.Lucius (CssUrl, luciusFile, luciusFileDebug, renderCss)
+import Data.Text (Text)
+import qualified Data.Text.Lazy.IO as TLIO
+
+data MyRoute = Home | Time | Stylesheet
+
+render :: MyRoute -> [(Text, Text)] -> Text
+render Home _ = "/home"
+render Time _ = "/time"
+render Stylesheet _ = "/style.css"
+
+template :: CssUrl MyRoute
+#if PRODUCTION
+template = $(luciusFile "template.lucius")
+#else
+template = $(luciusFileDebug "template.lucius")
+#endif
+
+main :: IO ()
+main = TLIO.putStrLn $ renderCss $ template render
+    
+    
+====================================
+Example: External file
+
+-- @template.lucius
+foo { bar: baz }
+    
+    
+====================================
+data Msg = Hello | Apples Int
+    
+    
+====================================
+renderEnglish :: Msg -> Text
+renderEnglish Hello = "Hello"
+renderEnglish (Apples 0) = "You did not buy any apples."
+renderEnglish (Apples 1) = "You bought 1 apple."
+renderEnglish (Apples i) = T.concat ["You bought ", T.pack $ show i, " apples."]
+    
+    
+====================================
+$doctype 5
+<html>
+    <head>
+        <title>i18n
+    <body>
+        <h1>_{Hello}
+        <p>_{Apples count}
+    
+    
+====================================
+type Render url = url -> [(Text, Text)] -> Text
+type Translate msg = msg -> Html
+type HtmlUrlI18n msg url = Translate msg -> Render url -> Html
+    
+    
+====================================
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
+import Data.Text (Text)
+import qualified Data.Text as T
+import Text.Hamlet (HtmlUrlI18n, ihamlet)
+import Text.Blaze (toHtml)
+import Text.Blaze.Renderer.String (renderHtml)
+
+data MyRoute = Home | Time | Stylesheet
+
+renderUrl :: MyRoute -> [(Text, Text)] -> Text
+renderUrl Home _ = "/home"
+renderUrl Time _ = "/time"
+renderUrl Stylesheet _ = "/style.css"
+
+data Msg = Hello | Apples Int
+
+renderEnglish :: Msg -> Text
+renderEnglish Hello = "Hello"
+renderEnglish (Apples 0) = "You did not buy any apples."
+renderEnglish (Apples 1) = "You bought 1 apple."
+renderEnglish (Apples i) = T.concat ["You bought ", T.pack $ show i, " apples."]
+
+template :: Int -> HtmlUrlI18n Msg MyRoute
+template count = [ihamlet|
+$doctype 5
+<html>
+    <head>
+        <title>i18n
+    <body>
+        <h1>_{Hello}
+        <p>_{Apples count}
+|]
+
+main :: IO ()
+main = putStrLn $ renderHtml
+     $ (template 5) (toHtml . renderEnglish) renderUrl
+    
+    
+====================================
+{-# LANGUAGE QuasiQuotes, OverloadedStrings #-}
+import Text.Shakespeare.Text
+import qualified Data.Text.Lazy.IO as TLIO
+import Data.Text (Text)
+import Control.Monad (forM_)
+
+data Item = Item
+    { itemName :: Text
+    , itemQty :: Int
+    }
+
+items :: [Item]
+items =
+    [ Item "apples" 5
+    , Item "bananas" 10
+    ]
+
+main :: IO ()
+main = forM_ items $ \item -> TLIO.putStrLn
+    [lt|You have #{show $ itemQty item} #{itemName item}.|]
+    
+    
+==================

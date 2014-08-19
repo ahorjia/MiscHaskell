@@ -1,0 +1,924 @@
+appendix: Conduit
+==================
+{-# LANGUAGE OverloadedStrings #-}
+import Data.Conduit -- the core library
+import qualified Data.Conduit.List as CL -- some list-like functions
+import qualified Data.Conduit.Binary as CB -- bytes
+import qualified Data.Conduit.Text as CT
+
+import Data.ByteString (ByteString)
+import Data.Text (Text)
+import qualified Data.Text as T
+import Control.Monad.ST (runST)
+
+-- Let's start with the basics: connecting a source to a sink. We'll use the
+-- built-in file functions to implementing efficient, constant-memory,
+-- resource-friendly file copying.
+--
+-- Two things to note: we use $$ to connect our source to our sink, and then
+-- use runResourceT.
+copyFile :: FilePath -> FilePath -> IO ()
+copyFile src dest = runResourceT $ CB.sourceFile src $$ CB.sinkFile dest
+
+
+-- The Data.Conduit.List module provides a number of helper functions for
+-- creating sources, sinks, and conduits. Let's look at a typical fold: summing
+-- numbers.
+sumSink :: Resource m => Sink Int m Int
+sumSink = CL.fold (+) 0
+
+-- If we want to go a little more low-level, we can code our sink with the
+-- sinkState function. This function takes three parameters: an initial state,
+-- a push function (receive some more data), and a close function.
+sumSink2 :: Resource m => Sink Int m Int
+sumSink2 = sinkState
+    0 -- initial value
+
+    -- update the state with the new input and
+    -- indicate that we want more input
+    (\accum i -> return $ StateProcessing (accum + i))
+    (\accum -> return accum) -- return the current accum value on close
+
+-- Another common helper function is sourceList. Let's see how we can combine
+-- that function with our sumSink to reimplement the built-in sum function.
+sum' :: [Int] -> Int
+sum' input = runST $ runResourceT $ CL.sourceList input $$ sumSink
+
+-- Since this is Haskell, let's write a source to generate all of the
+-- Fibonacci numbers. We'll use sourceState. The state will contain the next
+-- two numbers in the sequence. We also need to provide a pull function, which
+-- will return the next number and update the state.
+fibs :: Resource m => Source m Int
+fibs = sourceState
+    (0, 1) -- initial state
+    (\(x, y) -> return $ StateOpen (y, x + y) x)
+
+-- Suppose we want to get the sum of the first 10 Fibonacci numbers. We can use
+-- the isolate conduit to make sure the sum sink only consumes 10 values.
+sumTenFibs :: Int
+sumTenFibs =
+       runST -- runs fine in pure code
+     $ runResourceT
+     $ fibs
+    $= CL.isolate 10 -- fuse the source and conduit into a source
+    $$ sumSink
+
+-- We can also fuse the conduit into the sink instead, we just swap a few
+-- operators.
+sumTenFibs2 :: Int
+sumTenFibs2 =
+       runST
+     $ runResourceT
+     $ fibs
+    $$ CL.isolate 10
+    =$ sumSink
+
+-- Alright, let's make some conduits. Let's turn our numbers into text. Sounds
+-- like a job for a map...
+
+intToText :: Int -> Text -- just a helper function
+intToText = T.pack . show
+
+textify :: Resource m => Conduit Int m Text
+textify = CL.map intToText
+
+-- Like previously, we can use a conduitState helper function. But here, we
+-- don't even need state, so we provide a dummy state value.
+textify2 :: Resource m => Conduit Int m Text
+textify2 = conduitState
+    ()
+    (\() input -> return $ StateProducing () [intToText input])
+    (\() -> return [])
+
+-- Let's make the unlines conduit, that puts a newline on the end of each piece
+-- of input. We'll just use CL.map; feel free to write it with conduitState as
+-- well for practice.
+unlines' :: Resource m => Conduit Text m Text
+unlines' = CL.map $ \t -> t `T.append` "\n"
+
+-- And let's write a function that prints the first N fibs to a file. We'll
+-- use UTF-8 encoding.
+writeFibs :: Int -> FilePath -> IO ()
+writeFibs count dest =
+      runResourceT
+    $ fibs
+   $= CL.isolate count
+   $= textify
+   $= unlines'
+   $= CT.encode CT.utf8
+   $$ CB.sinkFile dest
+
+-- We used the $= operator to fuse the conduits into the sources, producing a
+-- single source. We can also do the opposite: fuse the conduits into the sink. We can even combine the two.
+writeFibs2 :: Int -> FilePath -> IO ()
+writeFibs2 count dest =
+      runResourceT
+    $ fibs
+   $= CL.isolate count
+   $= textify
+   $$ unlines'
+   =$ CT.encode CT.utf8
+   =$ CB.sinkFile dest
+
+-- Or we could fuse all those inner conduits into a single conduit...
+someIntLines :: ResourceThrow m -- encoding can throw an exception
+             => Int
+             -> Conduit Int m ByteString
+someIntLines count =
+      CL.isolate count
+  =$= textify
+  =$= unlines'
+  =$= CT.encode CT.utf8
+
+-- and then use that conduit
+writeFibs3 :: Int -> FilePath -> IO ()
+writeFibs3 count dest =
+      runResourceT
+    $ fibs
+   $= someIntLines count
+   $$ CB.sinkFile dest
+
+main :: IO ()
+main = do
+    putStrLn $ "First ten fibs: " ++ show sumTenFibs
+    writeFibs 20 "fibs.txt"
+    copyFile "fibs.txt" "fibs2.txt"
+    
+    
+====================================
+import System.IO
+
+main = do
+    output <- openFile "output.txt" WriteMode
+    input  <- openFile "input.txt"  ReadMode
+    hGetContents input >>= hPutStr output
+    hClose input
+    hClose output
+    
+    
+====================================
+import System.IO
+
+main =
+    withFile "output.txt" WriteMode $ \output ->
+    withFile "input.txt" ReadMode $ \input ->
+    hGetContents input >>= hPutStr output
+    
+    
+====================================
+import System.IO
+import Data.Enumerator
+import Data.Enumerator.Binary
+
+main =
+    withFile "output.txt" WriteMode $ \output ->
+    run_ $ enumFile "input.txt" $$ iterHandle output
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+import Data.Conduit
+import Data.Conduit.Binary
+
+main = runResourceT $ sourceFile "input.txt" $$ sinkFile "output.txt"
+    
+    
+====================================
+register :: IO () -> ResourceT IO ReleaseKey
+    
+    
+====================================
+release :: ReleaseKey -> ResourceT IO ()
+    
+    
+====================================
+runResourceT :: ResourceT IO a -> IO a
+    
+    
+====================================
+with :: IO a -- ^ allocate
+     -> (a -> IO ()) -- ^ free resource
+     -> ResourceT IO (ReleaseKey, a)
+    
+    
+====================================
+import System.IO
+import Control.Monad.Trans.Resource
+import Control.Monad.Trans.Class (lift)
+
+main = runResourceT $ do
+    (releaseO, output) <- with (openFile "output.txt" WriteMode) hClose
+    (releaseI, input)  <- with (openFile "input.txt"  ReadMode)  hClose
+    lift $ hGetContents input >>= hPutStr output
+    release releaseI
+    release releaseO
+    
+    
+====================================
+class Monad m => HasRef m where
+    type Ref m :: * -> *
+    newRef' :: a -> m (Ref m a)
+    readRef' :: Ref m a -> m a
+    writeRef' :: Ref m a -> a -> m ()
+    modifyRef' :: Ref m a -> (a -> (a, b)) -> m b
+    mask :: ((forall a. m a -> m a) -> m b) -> m b
+    mask_ :: m a -> m a
+    try :: m a -> m (Either SomeException a)
+    
+    
+====================================
+instance HasRef IO where
+    type Ref IO = I.IORef
+    newRef' = I.newIORef
+    modifyRef' = I.atomicModifyIORef
+    readRef' = I.readIORef
+    writeRef' = I.writeIORef
+    mask = E.mask
+    mask_ = E.mask_
+    try = E.try
+    
+    
+====================================
+class (HasRef (Base m), Monad m) => Resource m where
+    type Base m :: * -> *
+
+    resourceLiftBase :: Base m a -> m a
+    
+    
+====================================
+    resourceBracket_ :: Base m a -> Base m b -> m c -> m c
+    
+    
+====================================
+instance Resource IO where
+    type Base IO = IO
+    resourceLiftBase = id
+    resourceBracket_ = E.bracket_
+    
+    
+====================================
+instance (MonadTransControl t, Resource m, Monad (t m))
+        => Resource (t m) where
+    type Base (t m) = Base m
+
+    resourceLiftBase = lift . resourceLiftBase
+    resourceBracket_ a b c =
+        control' $ \run -> resourceBracket_ a b (run c)
+      where
+        control' f = liftWith f >>= restoreT . return
+    
+    
+====================================
+newtype ReleaseKey = ReleaseKey Int
+
+type RefCount = Int
+type NextKey = Int
+
+data ReleaseMap base =
+    ReleaseMap !NextKey !RefCount !(IntMap (base ()))
+
+newtype ResourceT m a =
+    ResourceT (Ref (Base m) (ReleaseMap (Base m)) -> m a)
+    
+    
+====================================
+transResourceT :: (Base m ~ Base n)
+               => (m a -> n a)
+               -> ResourceT m a
+               -> ResourceT n a
+transResourceT f (ResourceT mx) = ResourceT (\r -> f (mx r))
+    
+    
+====================================
+data SourceResult m a = Open (Source m a) a | Closed
+data Source m a = Source
+    { sourcePull :: ResourceT m (SourceResult m a)
+    , sourceClose :: ResourceT m ()
+    }
+    
+    
+====================================
+import Prelude hiding (repeat)
+import Data.Conduit
+
+-- | Never give any data
+eof :: Monad m => Source m a
+eof = Source
+    { sourcePull = return Closed
+    , sourceClose = return ()
+    }
+
+-- | Always give the same value
+repeat :: Monad m => a -> Source m a
+repeat a = Source
+    { sourcePull = return $ Open (repeat a) a
+    , sourceClose = return ()
+    }
+    
+    
+====================================
+import Data.Conduit
+import Control.Monad.Trans.Resource
+
+-- | Provide data from the list, one element at a time.
+sourceList :: Resource m => [a] -> Source m a
+sourceList list = Source
+    { sourcePull =
+        case list of
+            [] -> return Closed -- no more data
+
+            -- This is where we store our state: by returning a new
+            -- Source with the rest of the list
+            x:xs -> return $ Open (sourceList xs) x
+        , sourceClose = return ()
+        }
+    
+    
+====================================
+import Data.Conduit
+import Control.Monad.Trans.Resource
+
+-- | Provide data from the list, one element at a time.
+sourceList :: Resource m => [a] -> Source m a
+sourceList state0 = sourceState
+    state0
+    pull
+  where
+    pull [] = return StateClosed
+    pull (x:xs) = return $ StateOpen xs x
+    
+    
+====================================
+import Data.Conduit
+import Control.Monad.Trans.Resource
+import System.IO
+import Control.Monad.IO.Class (liftIO)
+
+sourceFile :: ResourceIO m => FilePath -> Source m Char
+sourceFile fp = sourceIO
+    (openFile fp ReadMode)
+    hClose
+    (\h -> liftIO $ do
+        eof <- hIsEOF h
+        if eof
+            then return IOClosed
+            else fmap IOOpen $ hGetChar h)
+    
+    
+====================================
+import Data.Conduit
+import qualified Data.Conduit.List as CL
+
+-- Get a single line from the stream.
+sinkLine :: Resource m => Sink Char m String
+sinkLine = sinkState
+    id -- initial state, nothing at the beginning of the line
+    push
+    close
+  where
+    -- On a new line, return the contents up until here
+    push front '\n' =
+        return $ StateDone Nothing $ front []
+
+    -- Just another character, add it to the front and keep going
+    push front char =
+        return $ StateProcessing $ front . (char:)
+
+    -- Got an EOF before hitting a newline, just give what we have so far
+    close front = return $ front []
+
+-- Get all the lines from the stream, until we hit a blank line or EOF.
+sinkLines :: Resource m => Sink Char m [String]
+sinkLines = do
+    line <- sinkLine
+    if null line
+        then return []
+        else do
+            lines <- sinkLines
+            return $ line : lines
+
+content :: String
+content = unlines
+    [ "This is the first line."
+    , "Here's the second."
+    , ""
+    , "After the blank."
+    ]
+
+main :: IO ()
+main = do
+    lines <- runResourceT $ CL.sourceList content $$ sinkLines
+    mapM_ putStrLn lines
+    
+    
+====================================
+This is the first line.
+Here's the second.
+    
+    
+====================================
+type SinkPush input m output = input -> ResourceT m (SinkResult input m output)
+type SinkClose m output = ResourceT m output
+
+data SinkResult input m output =
+    Processing (SinkPush input m output) (SinkClose m output)
+  | Done (Maybe input) output
+
+data Sink input m output =
+    SinkNoData output
+  | SinkData
+        { sinkPush :: SinkPush input m output
+        , sinkClose :: SinkClose m output
+        }
+  | SinkLift (ResourceT m (Sink input m output))
+    
+    
+====================================
+myReturn a = SinkData (\input -> return (Done (Just input) a)) (return a)
+    
+    
+====================================
+import Data.Conduit
+import System.IO
+import Control.Monad.Trans.Resource
+import Control.Monad.IO.Class (liftIO)
+
+-- Consume all input and discard it.
+sinkNull :: Resource m => Sink a m ()
+sinkNull =
+    SinkData push close
+  where
+    push _ignored = return $ Processing push close
+    close = return ()
+
+-- Let's stream characters to a file. Here we do need some kind of
+-- initialization. We do this by initializing in a push function,
+-- and then returning a different push function for subsequent
+-- calls. By using withIO, we know that the handle will be closed even
+-- if there's an exception.
+sinkFile :: ResourceIO m => FilePath -> Sink Char m ()
+sinkFile fp =
+    SinkData pushInit closeInit
+  where
+    pushInit char = do
+        (releaseKey, handle) <- withIO (openFile fp WriteMode) hClose
+        push releaseKey handle char
+    closeInit = do
+        -- Never opened a file, so nothing to do here
+        return ()
+
+    push releaseKey handle char = do
+        liftIO $ hPutChar handle char
+        return $ Processing (push releaseKey handle) (close releaseKey handle)
+
+    close releaseKey _ = do
+        -- Close the file handle as soon as possible.
+        return ()
+
+-- And we'll count how many values were in the stream.
+count :: Resource m => Sink a m Int
+count =
+    SinkData (push 0) (close 0)
+  where
+    push count _ignored =
+        return $ Processing (push count') (close count')
+      where
+        count' = count + 1
+
+    close count = return count
+    
+    
+====================================
+import Data.Conduit
+import System.IO
+import Control.Monad.IO.Class (liftIO)
+
+-- We never have to touch the release key directly; sinkIO automatically
+-- releases our resource as soon as we return IODone from our push function,
+-- or sinkClose is called.
+sinkFile :: ResourceIO m => FilePath -> Sink Char m ()
+sinkFile fp = sinkIO
+    (openFile fp WriteMode)
+    hClose
+    -- push: notice that we are given the handle and the input
+    (\handle char -> do
+        liftIO $ hPutChar handle char
+        return IOProcessing)
+    -- close: we're also given the handle, but we don't use it
+    (\_handle -> return ())
+
+-- And we'll count how many values were in the stream.
+count :: Resource m => Sink a m Int
+count = sinkState
+    0
+    -- The push function gets both the current state and the next input...
+    (\state _ignored ->
+        -- and it returns the new state
+        return $ StateProcessing $ state + 1)
+    -- The close function gets the final state and returns the output.
+    (\state -> return state)
+    
+    
+====================================
+import Data.Conduit
+import qualified Data.Conduit.List as CL
+import Control.Monad.IO.Class (liftIO)
+
+-- A sum function.
+sum' :: Resource m => Sink Int m Int
+sum' = CL.fold (+) 0
+
+-- Print every input value to standard output.
+printer :: (Show a, ResourceIO m) => Sink a m ()
+printer = CL.mapM_ (liftIO . print)
+
+-- Sum up all the values in a stream after the first five.
+sumSkipFive :: Resource m => Sink Int m Int
+sumSkipFive = do
+    CL.drop 5
+    CL.fold (+) 0
+
+-- Print each input number and sum the total
+printSum :: ResourceIO m => Sink Int m Int
+printSum = do
+    total <- CL.foldM go 0
+    liftIO $ putStrLn $ "Sum: " ++ show total
+    return total
+  where
+    go accum int = do
+        liftIO $ putStrLn $ "New input: " ++ show int
+        return $ accum + int
+    
+    
+====================================
+main :: IO ()
+main = runResourceT $ do
+    res <-
+        case printSum of
+            SinkData push close -> loop [1..10] push close
+            SinkNoData res -> return res
+    liftIO $ putStrLn $ "Got a result: " ++ show res
+  where
+    start (SinkData push close) = loop [1..10] push close
+    start (SinkNoData res) = return res
+    start (SinkLift msink) = msink >>= start
+
+    loop [] _push close = close
+    loop (x:xs) push close = do
+        mres <- push x
+        case mres of
+            Done _leftover res -> return res
+            Processing push' close' -> loop xs push' close'
+    
+    
+====================================
+main :: IO ()
+main = runResourceT $ do
+    res <- CL.sourceList [1..10] $$ printSum
+    liftIO $ putStrLn $ "Got a result: " ++ show res
+    
+    
+====================================
+data ConduitResult input m output =
+    Producing (Conduit input m output) [output]
+  | Finished (Maybe input) [output]
+
+data Conduit input m output = Conduit
+    { conduitPush :: input -> ResourceT m (ConduitResult input m output)
+    , conduitClose :: ResourceT m [output]
+    }
+    
+    
+====================================
+import Prelude hiding (map, concatMap)
+import Data.Conduit
+
+-- A simple conduit that just passes on the data as is.
+passThrough :: Monad m => Conduit input m input
+passThrough = Conduit
+    { conduitPush = \input -> return $ Producing passThrough [input]
+    , conduitClose = return []
+    }
+
+-- map values in a stream
+map :: Monad m => (input -> output) -> Conduit input m output
+map f = Conduit
+    { conduitPush = \input -> return $ Producing (map f) [f input]
+    , conduitClose = return []
+    }
+
+-- map and concatenate
+concatMap :: Monad m => (input -> [output]) -> Conduit input m output
+concatMap f = Conduit
+    { conduitPush = \input -> return $ Producing (concatMap f) $ f input
+    , conduitClose = return []
+    }
+    
+    
+====================================
+import Prelude hiding (reverse)
+import qualified Data.List
+import Data.Conduit
+import Control.Monad.Trans.Resource
+
+-- Reverse the elements in the stream. Note that this has the same downside as
+-- the standard reverse function: you have to read the entire stream into
+-- memory before producing any output.
+reverse :: Resource m => Conduit input m input
+reverse =
+    mkConduit []
+  where
+    mkConduit state = Conduit (push state) (close state)
+    push state input = return $ Producing (mkConduit $ input : state) []
+    close state = return state
+
+-- Same thing with sort: it will pull everything into memory
+sort :: (Ord input, Resource m) => Conduit input m input
+sort =
+    mkConduit []
+  where
+    mkConduit state = Conduit (push state) (close state)
+    push state input = return $ Producing (mkConduit $ input : state) []
+    close state = return $ Data.List.sort state
+    
+    
+====================================
+import Prelude hiding (reverse)
+import qualified Data.List
+import Data.Conduit
+
+-- Reverse the elements in the stream. Note that this has the same downside as
+-- the standard reverse function: you have to read the entire stream into
+-- memory before producing any output.
+reverse :: Resource m => Conduit input m input
+reverse =
+    conduitState [] push close
+  where
+    push state input = return $ StateProducing (input : state) []
+    close state = return state
+
+-- Same thing with sort: it will pull everything into memory
+sort :: (Ord input, Resource m) => Conduit input m input
+sort =
+    conduitState [] push close
+  where
+    push state input = return $ StateProducing (input : state) []
+    close state = return $ Data.List.sort state
+    
+    
+====================================
+-- Left fusion: source + conduit = source
+($=) :: (Resource m, IsSource src) => src m a -> Conduit a m b -> Source m b
+
+-- Right fusion: conduit + sink = sink
+(=$) :: Resource m => Conduit a m b -> Sink b m c -> Sink a m c
+
+-- Middle fusion: conduit + conduit = conduit
+(=$=) :: Resource m => Conduit a m b -> Conduit b m c -> Conduit a m c
+    
+    
+====================================
+useConduits = do
+    runResourceT
+          $  CL.sourceList [1..10]
+          $= reverse
+          $= CL.map show
+          $$ CL.consume
+
+    -- equivalent to
+    runResourceT
+          $  CL.sourceList [1..10]
+          $$ reverse
+          =$ CL.map show
+          =$ CL.consume
+
+    -- and equivalent to
+    runResourceT
+          $  CL.sourceList [1..10]
+          $$ (reverse =$= CL.map show)
+          =$ CL.consume
+    
+    
+====================================
+main = do
+    let list = [1..10]
+        transformed = map show list
+        (begin, end) = splitAt 5 transformed
+        untransformed = map read end
+    mapM_ putStrLn begin
+    print $ sum untransformed
+    
+    
+====================================
+main = do
+    let list = [1..10]
+        (begin, end) = splitAt 5 list
+        transformed = map show begin
+    mapM_ putStrLn transformed
+    print $ sum end
+    
+    
+====================================
+deviousTransform =
+    concatMap go
+  where
+    go 1 = [show 1]
+    go 2 = [show 2, "two"]
+    go 3 = replicate 5 "three"
+    go x = [show x]
+    
+    
+====================================
+deviousTransform 1 = [show 1]
+deviousTransform 2 = [show 2, "two"]
+deviousTransform 3 = replicate 5 "three"
+deviousTransform x = [show x]
+
+transform5 :: [Int] -> ([String], [Int])
+transform5 list =
+    go [] list
+  where
+    go output (x:xs)
+        | newLen >= 5 = (take 5 output', xs)
+        | otherwise = go output' xs
+      where
+        output' = output ++ deviousTransform x
+        newLen = length output'
+
+    -- Degenerate case: not enough input to make 5 outputs
+    go output [] = (output, [])
+
+main = do
+    let list = [1..10]
+        (begin, end) = transform5 list
+    mapM_ putStrLn begin
+    print $ sum end
+    
+    
+====================================
+1
+2
+two
+three
+three
+49
+    
+    
+====================================
+sum5Raw :: Resource m => Conduit Int m Int
+sum5Raw =
+    conduitState (0, 0) push close
+  where
+    push (total, count) input
+        | newCount == 5 = return $ StateProducing (0, 0) [newTotal]
+        | otherwise     = return $ StateProducing (newTotal, newCount) []
+      where
+        newTotal = total + input
+        newCount = count + 1
+    close (total, count)
+        | count == 0 = return []
+        | otherwise  = return [total]
+    
+    
+====================================
+sum5 :: Resource m => Conduit Int m Int
+sum5 = sequenceSink () $ \() -> do
+    nextSum <- CL.isolate 5 =$ CL.fold (+) 0
+    return $ Emit () [nextSum]
+    
+    
+====================================
+sum5Pass :: Resource m => Conduit Int m Int
+sum5Pass = sequenceSink 0 $ \count -> do
+    if count == 8
+        then return $ StartConduit $ CL.map (* 2)
+        else do
+            nextSum <- CL.isolate 5 =$ CL.fold (+) 0
+            return $ Emit (count + 1) [nextSum]
+    
+    
+====================================
+data Socket
+recv    :: Socket -> Int -> IO ByteString -- returns empty when the socket is closed
+sendAll :: Socket -> ByteString -> IO ()
+    
+    
+====================================
+data Request  -- request headers, HTTP version, etc
+data Response -- status code, response headers, response body
+type Application = Request -> IO Response
+handleConn :: Application -> Socket -> IO ()
+    
+    
+====================================
+data RequestLine = RequestLine ByteString ByteString ByteString
+
+parseRequestLine :: Socket -> IO RequestLine
+parseRequestLine socket = do
+    bs <- recv socket 4096
+    let (method:path:version:ignored) = S8.words bs
+    return $ RequestLine method path version
+    
+    
+====================================
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as S
+import Data.Conduit
+import qualified Data.Conduit.Binary as CB
+import qualified Data.Conduit.List as CL
+
+data RequestLine = RequestLine ByteString ByteString ByteString
+
+parseRequestLine :: Sink ByteString IO RequestLine
+parseRequestLine = do
+    let space = toEnum $ fromEnum ' '
+    let getWord = do
+            CB.dropWhile (== space)
+            bss <- CB.takeWhile (/= space) =$ CL.consume
+            return $ S.concat bss
+
+    method <- getWord
+    path <- getWord
+    version <- getWord
+    return $ RequestLine method path version
+    
+    
+====================================
+import Data.ByteString (ByteString)
+import Data.Conduit
+import Data.Conduit.Network (sourceSocket)
+import Control.Monad.IO.Class (liftIO)
+import Network.Socket (Socket)
+
+data RequestLine = RequestLine ByteString ByteString ByteString
+type Headers = [(ByteString, ByteString)]
+data Request = Request RequestLine Headers
+data Response = Response
+type Application = Request -> IO Response
+
+parseRequestHeaders :: Sink ByteString IO Headers
+parseRequestHeaders = undefined
+
+parseRequestLine :: Sink ByteString IO RequestLine
+parseRequestLine = undefined
+
+sendResponse :: Socket -> Response -> IO ()
+sendResponse = undefined
+
+handleConn :: Application -> Socket -> IO ()
+handleConn app socket = do
+    req <- runResourceT $ sourceSocket socket $$ do
+        requestLine <- parseRequestLine
+        headers <- parseRequestHeaders
+        return $ Request requestLine headers
+    res <- liftIO $ app req
+    liftIO $ sendResponse socket res
+    
+    
+====================================
+bufferSource ::Resource m => Source m a -> ResourceT m (BufferedSource m a)
+    
+    
+====================================
+sourceFile input $$ sinkFile output
+    
+    
+====================================
+bsrc <- bufferSource $ sourceFile input
+bsrc $$ isolate 50 =$ sinkFile output1
+bsrc $$ sinkFile output2
+    
+    
+====================================
+import Data.ByteString (ByteString)
+import Data.Conduit
+import Data.Conduit.Network (sourceSocket)
+import Control.Monad.IO.Class (liftIO)
+import Network.Socket (Socket)
+
+data RequestLine = RequestLine ByteString ByteString ByteString
+type Headers = [(ByteString, ByteString)]
+data Request = Request RequestLine Headers (BufferedSource IO ByteString)
+data Response = Response
+type Application = Request -> ResourceT IO Response
+
+parseRequestHeaders :: Sink ByteString IO Headers
+parseRequestHeaders = undefined
+
+parseRequestLine :: Sink ByteString IO RequestLine
+parseRequestLine = undefined
+
+sendResponse :: Socket -> Response -> IO ()
+sendResponse = undefined
+
+handleConn :: Application -> Socket -> IO ()
+handleConn app socket = runResourceT $ do
+    bsrc <- bufferSource $ sourceSocket socket
+    requestLine <- bsrc $$ parseRequestLine
+    headers <- bsrc $$ parseRequestHeaders
+    let req = Request requestLine headers bsrc
+    res <- app req
+    liftIO $ sendResponse socket res
+    
+    
+==================

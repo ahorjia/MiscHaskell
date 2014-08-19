@@ -1,0 +1,101 @@
+chapter: Basics
+==================
+{-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses,
+             TemplateHaskell, OverloadedStrings #-}
+import Yesod
+
+data HelloWorld = HelloWorld
+
+mkYesod "HelloWorld" [parseRoutes|
+/ HomeR GET
+|]
+
+instance Yesod HelloWorld
+
+getHomeR :: Handler RepHtml
+getHomeR = defaultLayout [whamlet|Hello World!|]
+
+main :: IO ()
+main = warpDebug 3000 HelloWorld
+    
+    
+====================================
+<!DOCTYPE html>
+<html><head><title></title></head><body>Hello World!</body></html>
+    
+    
+====================================
+mkYesod "HelloWorld" [parseRoutes|
+/ HomeR GET
+|]
+    
+    
+====================================
+instance RenderRoute HelloWorld where
+  data Route HelloWorld = HomeR
+    deriving (Show, Eq, Read)
+  renderRoute HomeR = ([], [])
+
+instance YesodDispatch HelloWorld HelloWorld where
+    yesodDispatch master sub toMaster app404 app405 method pieces =
+        case dispatch pieces of
+            Just f -> f
+                master
+                sub
+                toMaster
+                app404
+                app405
+                method
+            Nothing -> app404
+      where
+        dispatch = Yesod.Routes.Dispatch.toDispatch
+            [ Yesod.Routes.Dispatch.Route [] False onHome
+            ]
+        onHome [] = Just $ \master sub toMaster _app404 app405 method ->
+            case method of
+                "GET" -> yesodRunner
+                    (fmap chooseRep getHomeR)
+                    master
+                    sub
+                    (Just HomeR)
+                    toMaster
+                _ -> app405 HomeR
+    
+    
+====================================
+{-# LANGUAGE TypeFamilies, QuasiQuotes, MultiParamTypeClasses,
+             TemplateHaskell, OverloadedStrings #-}
+import Yesod
+
+data Links = Links
+
+mkYesod "Links" [parseRoutes|
+/ HomeR GET
+/page1 Page1R GET
+/page2 Page2R GET
+|]
+
+instance Yesod Links
+
+getHomeR  = defaultLayout [whamlet|<a href=@{Page1R}>Go to page 1!|]
+getPage1R = defaultLayout [whamlet|<a href=@{Page2R}>Go to page 2!|]
+getPage2R = defaultLayout [whamlet|<a href=@{HomeR}>Go home!|]
+
+main = warpDebug 3000 Links
+    
+    
+====================================
+<a href=@{Page1R}>Go to page 1!
+    
+    
+====================================
+instance RenderRoute Links where
+    data Route Links = HomeR | Page1R | Page2R
+      deriving (Show, Eq, Read)
+
+    renderRoute HomeR  = ([], [])
+    renderRoute Page1R = (["page1"], [])
+    renderRoute Page2R = (["page2"], [])
+    
+    
+==================

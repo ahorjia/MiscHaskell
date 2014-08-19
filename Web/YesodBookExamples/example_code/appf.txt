@@ -1,0 +1,391 @@
+appendix: xml-conduit
+==================
+Example: Input XML file
+
+<document title="My Title">
+    <para>This is a paragraph. It has <em>emphasized</em> and <strong>strong</strong> words.</para>
+    <image href="myimage.png"/>
+</document>
+    
+    
+====================================
+Example: Haskell code
+
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (readFile, writeFile)
+import Text.XML
+import Text.Hamlet.XML
+
+main :: IO ()
+main = do
+    -- readFile will throw any parse errors as runtime exceptions
+    -- def uses the default settings
+    Document prologue root epilogue <- readFile def "input.xml"
+
+    -- root is the root element of the document, let's modify it
+    let root' = transform root
+
+    -- And now we write out. Let's indent our output
+    writeFile def
+        { rsPretty = True
+        } "output.html" $ Document prologue root' epilogue
+
+-- We'll turn out <document> into an XHTML document
+transform :: Element -> Element
+transform (Element _name attrs children) = Element "html" [] [xml|
+<head>
+    <title>
+        $maybe title <- lookup "title" attrs
+            \#{title}
+        $nothing
+            Untitled Document
+<body>
+    $forall child <- children
+        ^{goNode child}
+|]
+
+goNode :: Node -> [Node]
+goNode (NodeElement e) = [NodeElement $ goElem e]
+goNode (NodeContent t) = [NodeContent t]
+goNode (NodeComment _) = [] -- hide comments
+goNode (NodeInstruction _) = [] -- and hide processing instructions too
+
+-- convert each source element to its XHTML equivalent
+goElem :: Element -> Element
+goElem (Element "para" attrs children) =
+    Element "p" attrs $ concatMap goNode children
+goElem (Element "em" attrs children) =
+    Element "i" attrs $ concatMap goNode children
+goElem (Element "strong" attrs children) =
+    Element "b" attrs $ concatMap goNode children
+goElem (Element "image" attrs _children) =
+    Element "img" (map fixAttr attrs) [] -- images can't have children
+  where
+    fixAttr ("href", value) = ("src", value)
+    fixAttr x = x
+goElem (Element name attrs children) =
+    -- don't know what to do, just pass it through...
+    Element name attrs $ concatMap goNode children
+    
+    
+====================================
+Example: Output XHTML
+
+<?xml version="1.0" encoding="UTF-8"?>
+<html>
+    <head>
+        <title>
+            My Title
+        </title>
+    </head>
+    <body>
+        <p>
+            This is a paragraph. It has 
+            <i>
+                emphasized
+            </i>
+            and 
+            <b>
+                strong
+            </b>
+            words.
+        </p>
+        <img src="myimage.png"/>
+    </body>
+</html>
+    
+    
+====================================
+<no-namespace/>
+<no-prefix xmlns="first-namespace" first-attr="value1"/>
+<foo:with-prefix xmlns:foo="second-namespace" foo:second-attr="value2"/>
+    
+    
+====================================
+data Name = Name
+    { nameLocalName :: Text
+    , nameNamespace :: Maybe Text
+    , namePrefix :: Maybe Text
+    }
+    
+    
+====================================
+"{namespace}element" == Name "element" (Just "namespace") Nothing
+"element" == Name "element" Nothing Nothing
+    
+    
+====================================
+data Instruction = Instruction
+    { instructionTarget :: Text
+    , instructionData :: Text
+    }
+    
+    
+====================================
+data Element = Element
+    { elementName :: Name
+    , elementAttributes :: [(Name, Text)]
+    , elementNodes :: [Node]
+    }
+    
+    
+====================================
+data Node
+    = NodeElement Element
+    | NodeInstruction Instruction
+    | NodeContent Text
+    | NodeComment Text
+    
+    
+====================================
+data Document = Document
+    { documentPrologue :: Prologue
+    , documentRoot :: Element
+    , documentEpilogue :: [Miscellaneous]
+    }
+
+data Prologue = Prologue
+    { prologueBefore :: [Miscellaneous]
+    , prologueDoctype :: Maybe Doctype
+    , prologueAfter :: [Miscellaneous]
+    }
+
+data Miscellaneous
+    = MiscInstruction Instruction
+    | MiscComment Text
+
+data Doctype = Doctype
+    { doctypeName :: Text
+    , doctypeID :: Maybe ExternalID
+    }
+
+data ExternalID
+    = SystemID Text
+    | PublicID Text Text
+    
+    
+====================================
+<!DOCTYPE root> <!-- no external identifier -->
+<!DOCTYPE root SYSTEM "root.dtd"> <!-- a system identifier -->
+<!DOCTYPE root PUBLIC "My Root Public Identifier" "root.dtd"> <!-- public identifiers have a system ID as well -->
+    
+    
+====================================
+readFile  :: ParseSettings  -> FilePath -> IO Document
+writeFile :: RenderSettings -> FilePath -> Document -> IO ()
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (readFile)
+import Text.XML
+import Text.XML.Cursor
+import qualified Data.Text as T
+
+main :: IO ()
+main = do
+    doc <- readFile def "test.xml"
+    let cursor = fromDocument doc
+    print $ T.concat $
+            child cursor >>= element "head" >>= child
+                         >>= element "title" >>= descendant >>= content
+    
+    
+====================================
+<html>
+    <head>
+        <title>My <b>Title</b></title>
+    </head>
+    <body>
+        <p>Foo bar baz</p>
+    </body>
+</html>
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (readFile)
+import Text.XML
+import Text.XML.Cursor
+import qualified Data.Text as T
+
+main :: IO ()
+main = do
+    doc <- readFile def "test.xml"
+    let cursor = fromDocument doc
+    print $ T.concat $
+        cursor $/ element "head" &/ element "title" &// content
+    
+    
+====================================
+<html>
+    <head>
+        <title>Headings</title>
+    </head>
+    <body>
+        <hgroup>
+            <h1>Heading 1 foo</h1>
+            <h2 class="foo">Heading 2 foo</h2>
+        </hgroup>
+        <hgroup>
+            <h1>Heading 1 bar</h1>
+            <h2 class="bar">Heading 2 bar</h2>
+        </hgroup>
+    </body>
+</html>
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+import Prelude hiding (readFile)
+import Text.XML
+import Text.XML.Cursor
+import qualified Data.Text as T
+
+main :: IO ()
+main = do
+    doc <- readFile def "test2.xml"
+    let cursor = fromDocument doc
+    print $ T.concat $
+        cursor $// element "h2"
+               >=> attributeIs "class" "bar"
+               >=> precedingSibling
+               >=> element "h1"
+               &// content
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+import Text.XML
+import Prelude hiding (writeFile)
+
+main :: IO ()
+main =
+    writeFile def "test3.xml" $ Document (Prologue [] Nothing []) root []
+  where
+    root = Element "html" []
+        [ NodeElement $ Element "head" []
+            [ NodeElement $ Element "title" []
+                [ NodeContent "My "
+                , NodeElement $ Element "b" []
+                    [ NodeContent "Title"
+                    ]
+                ]
+            ]
+        , NodeElement $ Element "body" []
+            [ NodeElement $ Element "p" []
+                [ NodeContent "foo bar baz"
+                ]
+            ]
+        ]
+    
+    
+====================================
+<?xml version="1.0" encoding="UTF-8"?>
+<html><head><title>My <b>Title</b></title></head><body><p>foo bar baz</p></body></html>
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+import Text.XML
+import Text.Hamlet.XML
+import Prelude hiding (writeFile)
+
+main :: IO ()
+main =
+    writeFile def "test3.xml" $ Document (Prologue [] Nothing []) root []
+  where
+    root = Element "html" [] [xml|
+<head>
+    <title>
+        My #
+        <b>Title
+<body>
+    <p>foo bar baz
+|]
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+import Text.XML
+import Text.Hamlet.XML
+import Prelude hiding (writeFile)
+import Data.Text (Text, pack)
+
+data Person = Person
+    { personName :: Text
+    , personAge :: Int
+    }
+
+people :: [Person]
+people =
+    [ Person "Michael" 26
+    , Person "Miriam" 25
+    , Person "Eliezer" 3
+    , Person "Gavriella" 1
+    ]
+
+main :: IO ()
+main =
+    writeFile def "people.xml" $ Document (Prologue [] Nothing []) root []
+  where
+    root = Element "html" [] [xml|
+<head>
+    <title>Some People
+<body>
+    <h1>Some People
+    $if null people
+        <p>There are no people.
+    $else
+        <dl>
+            $forall person <- people
+                ^{personNodes person}
+|]
+
+personNodes :: Person -> [Node]
+personNodes person = [xml|
+<dt>#{personName person}
+<dd>#{pack $ show $ personAge person}
+|]
+    
+    
+====================================
+{-# LANGUAGE OverloadedStrings, QuasiQuotes #-}
+import Text.Blaze (toHtml)
+import Text.Blaze.Renderer.String (renderHtml)
+import Text.XML
+import Text.Hamlet.XML
+import Text.XML.Xml2Html ()
+
+main :: IO ()
+main = putStr $ renderHtml $ toHtml $ Document (Prologue [] Nothing []) root []
+
+root :: Element
+root = Element "html" [] [xml|
+<head>
+    <title>Test
+    <script>if (5 < 6 || 8 > 9) alert("Hello World!");
+    <style>body > h1 { color: red }
+<body>
+    <h1>Hello World!
+|]
+    
+    
+====================================
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>Test</title>
+        <script>if (5 < 6 || 8 > 9) alert("Hello World!");</script>
+        <style>body > h1 { color: red }</style>
+    </head>
+    <body>
+        <h1>Hello World!</h1>
+    </body>
+</html>
+    
+    
+==================

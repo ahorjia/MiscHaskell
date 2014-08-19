@@ -1,0 +1,49 @@
+appendix: Settings Types
+==================
+run :: Int -> Application -> IO ()
+    
+    
+====================================
+run :: Int -> Int -> Application -> IO ()
+    
+    
+====================================
+data Settings = Settings
+    { settingsPort :: Int
+    , settingsHost :: String
+    , settingsTimeout :: Int
+    }
+    
+    
+====================================
+run Settings
+    { settingsPort = 8080
+    , settingsHost = "127.0.0.1"
+    , settingsTimeout = 30
+    } myApp
+    
+    
+====================================
+defaultSettings = Settings 3000 "127.0.0.1" 30
+    
+    
+====================================
+run defaultSettings { settingsPort = 8080 } myApp -- (1)
+    
+    
+====================================
+run (Settings 8080 "127.0.0.1" 30) myApp -- (2)
+    
+    
+====================================
+module MyServer
+    ( Settings
+    , settingsPort
+    , settingsHost
+    , settingsTimeout
+    , run
+    , defaultSettings
+    ) where
+    
+    
+==================

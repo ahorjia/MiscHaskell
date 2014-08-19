@@ -1,0 +1,123 @@
+chapter: RESTful Content
+==================
+data Person = Person { name :: String, age :: Int }
+michael = Person "Michael" 25
+    
+    
+====================================
+<table>
+    <tr>
+        <th>Name</th>
+        <td>Michael</td>
+    </tr>
+    <tr>
+        <th>Age</th>
+        <td>25</td>
+    </tr>
+</table>
+    
+    
+====================================
+{"name":"Michael","age":25}
+    
+    
+====================================
+<person>
+    <name>Michael</name>
+    <age>25</age>
+</person>
+    
+    
+====================================
+type ChooseRep = [ContentType] -> IO (ContentType, Content)
+class HasReps a where
+    chooseRep :: a -> ChooseRep
+    
+    
+====================================
+newtype RepHtml = RepHtml Content
+instance HasReps RepHtml where
+    chooseRep (RepHtml content) _ = return ("text/html", content)
+    
+    
+====================================
+{-# LANGUAGE QuasiQuotes, TypeFamilies, OverloadedStrings #-}
+{-# LANGUAGE MultiParamTypeClasses, TemplateHaskell #-}
+import Yesod
+data R = R
+mkYesod "R" [parseRoutes|
+/ RootR GET
+/#String NameR GET
+|]
+instance Yesod R
+
+getRootR = defaultLayout $ do
+    setTitle "Homepage"
+    addScriptRemote "http://ajax.googleapis.com/ajax/libs/jquery/1.4/jquery.min.js"
+    addJulius [julius|
+$(function(){
+    $("#ajax a").click(function(){
+        jQuery.getJSON($(this).attr("href"), function(o){
+            $("div").text(o.name);
+        });
+        return false;
+    });
+});
+|]
+    let names = words "Larry Moe Curly"
+    addHamlet [hamlet|
+<h2>AJAX Version
+<div #results>
+    AJAX results will be placed here when you click #
+    the names below.
+<ul #ajax>
+    $forall name <- names
+        <li>
+            <a href=@{NameR name}>#{name}
+
+<h2>HTML Version
+<p>
+    Clicking the names below will redirect the page #
+    to an HTML version.
+<ul #html>
+    $forall name <- names
+        <li>
+            <a href=@{NameR name}>#{name}
+
+|]
+
+getNameR name = do
+    let widget = do
+            setTitle $ toHtml name
+            addHamlet [hamlet|Looks like you have Javascript off. Name: #{name}|]
+    let json = object ["name" .= name]
+    defaultLayoutJson widget json
+
+main = warpDebug 4000 R
+    
+    
+====================================
+newtype RepAtom = RepAtom Content
+instance HasReps RepAtom where
+    chooseRep (RepAtom c) _ = return (typeAtom, c)
+newtype RepRss = RepRss Content
+instance HasReps RepRss where
+    chooseRep (RepRss c) _ = return (typeRss, c)
+    
+    
+====================================
+data RepAtomRss = RepAtomRss RepAtom RepRss
+instance HasReps RepAtomRss where
+    chooseRep (RepAtomRss (RepAtom a) (RepRss r)) = chooseRep
+        [ (typeAtom, a)
+        , (typeRss, r)
+        ]
+    
+    
+====================================
+/ ProjectsR GET
+/projects/#ProjectID ProjectIssuesR GET
+/issues/#IssueID IssueR GET
+    
+    
+==================

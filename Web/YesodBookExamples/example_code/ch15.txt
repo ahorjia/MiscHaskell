@@ -1,0 +1,6 @@
+chapter: Scaffolding and the Site Template
+==================
+getRootR = defaultLayout $(widgetFile "homepage")
+    
+    
+==================
