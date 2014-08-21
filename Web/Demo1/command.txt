@@ -1,0 +1,11 @@
+cabal update 
+
+//Lexer
+cabal install alex 
+cabal install hjsmin 
+
+//Works without the previous packages
+cabal install yesod 
+
+ghc-pkg list | grep yesod 
+cabal install persistent-sqlite 

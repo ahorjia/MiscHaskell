@@ -6,22 +6,28 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 
-import           Data.Text           (Text, pack)
---import           Data.Time           (Day)
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+
+import           Data.Text           (Text, pack, unpack)
 import           Yesod.Form.Jquery
 import Yesod
 import Control.Arrow --Fanout operator
 import Control.Applicative ((<$>),(<*>)) --fmap apply and lift
 
+import Database.Persist.Sqlite
+import Control.Monad.Trans.Resource (runResourceT)
+import Control.Monad.Logger (runStderrLoggingT)
+
 -- Foundation data type
-data HelloWorld = HelloWorld
+data HelloWorld = HelloWorld ConnectionPool
 
 -- Watch for the comments in the block
 mkYesod "HelloWorld" [parseRoutes|
 / HomeR GET
 /page1 Page1R GET
 /page2 Page2R GET
-/age AgeR POST 
+/age AgeR POST
 |]
 
 -- Foundation data type
@@ -36,49 +42,6 @@ getPage1R = defaultLayout [whamlet|<a href=@{Page2R}> Go to page 2|]
 getPage2R = defaultLayout [whamlet|<a href=@{HomeR}> Go to Home|]
 
 --The Form Data
-data Person = Person
-    { name :: Text 
-    , year :: Int
-    , month :: Month 
-    , day :: Maybe Int -- Optional
-    }
-    deriving Show
-
-data Month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
-    deriving(Show, Eq, Enum, Bounded)
-
--- Applicative/Monadic/Input forms
--- Applicative most common
--- Monadic most flexible
--- Input?
--- Split the applicative and monadic forms
-ageAForm :: Maybe Person -> AForm Handler Person 
-ageAForm mperson = Person
-    -- areq and aopt functions for function and applicative
-    <$> areq textField "Name" (name <$> mperson)
-    <*> areq (selectFieldList years) "Year" (year <$> mperson)
-    <*> areq (selectFieldList months) "Month" (month <$> mperson)
-    <*> aopt ageDayField "Day" (day <$> mperson) -- intField
-    where
-        years :: [(Text, Int)] -- Fanout operator Control.Arrow
-        years = map (pack . show &&& id) [1900..2014] --for selectFieldList
-        months :: [(Text, Month)]
-        months = map (pack . show &&& id) $ [minBound..maxBound]
-
-        errorMessage :: Text
-        errorMessage = "Invalid day!"
-
-        ageDayField = check validateAgeDayField intField
-
-        validateAgeDayField d
-         | d < 0 = Left errorMessage
-         | d > 31 = Left errorMessage
-         | otherwise = Right d
-        
--- renderTable calls aformToForm which converts applicative form
--- to monadic form
-ageForm :: Html -> MForm Handler (FormResult Person, Widget)
-ageForm = renderTable $ ageAForm $ Just $ Person "John" 2013 Mar (Just 27)
 
 getHomeR :: Handler Html
 getHomeR = do
@@ -134,6 +97,72 @@ postAgeR = do
                     <button>Submit
             |]
 
+-- Persist Block
+-- share concatenates mkxxxxx results
+-- mkPersist turns each entity into a type and a PersistEntity instance for each type
+-- sqlSettings sets the "backend" for persist to be SqlBackend
+-- mkMigrate creates the table
+share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
+Person 
+    name Text
+    year Int
+    month Month
+    day Maybe Int
+|]
+
+instance Show Person where
+    show (Person n y m d) = 
+        "Hello: " ++ (unpack n)
+
+data Month = Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec
+    deriving(Show, Eq, Enum, Bounded)
+
+-- Applicative/Monadic/Input forms
+-- Applicative most common
+-- Monadic most flexible
+-- Input?
+-- Split the applicative and monadic forms
+ageAForm :: Maybe Person -> AForm Handler Person 
+ageAForm mperson = Person
+    -- areq and aopt functions for function and applicative
+    <$> areq textField "Name" (name <$> mperson)
+    <*> areq (selectFieldList years) "Year" (year <$> mperson)
+    <*> areq (selectFieldList months) "Month" (month <$> mperson)
+    <*> aopt ageDayField "Day" (day <$> mperson) -- intField
+    where
+        years :: [(Text, Int)] -- Fanout operator Control.Arrow
+        years = map (pack . show &&& id) [1900..2014] --for selectFieldList
+        months :: [(Text, Month)]
+        months = map (pack . show &&& id) $ [minBound..maxBound]
+
+        errorMessage :: Text
+        errorMessage = "Invalid day!"
+
+        ageDayField = check validateAgeDayField intField
+
+        validateAgeDayField d
+         | d < 0 = Left errorMessage
+         | d > 31 = Left errorMessage
+         | otherwise = Right d
+        
+-- renderTable calls aformToForm which converts applicative form
+-- to monadic form
+ageForm :: Html -> MForm Handler (FormResult Person, Widget)
+ageForm = renderTable $ ageAForm $ Just $ Person "John" 2013 Mar (Just 27)
+
 main :: IO ()
-main = warp 3000 HelloWorld
+main = withSqlitePool "testDemo.db3" 10 $ \pool -> do
+    runResourceT $ runStderrLoggingT $ flip runSqlPool pool $ do
+        runMigration migrateAll
+        insert $ Person "SD HUG1" 2014 Mar (Just 12)
+    warp 3000 $ HelloWorld pool
+
+
+-- The backend was defined as with sqlSettings
+instance YesodPersist HelloWorld  where
+    type YesodPersistBackend HelloWorld = SqlPersistT
+
+    runDB action = do
+        HelloWorld pool <- getYesod
+        runSqlPool action pool
 
