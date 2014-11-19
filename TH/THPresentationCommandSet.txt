@@ -1,0 +1,16 @@
+
+runhaskell HelloYesod.hs
+
+http://localhost:3000
+
+ghc -XTemplateHaskell -ddump-splices HelloYesod.hs 2> Dump.txt
+
+ghci -XTemplateHaskell
+
+:m + Language.Haskell.TH
+
+runQ [|”hello World!”|]
+
+(return (LamE [WildP] (LitE (StringL "hello"))))
+
+runQ (do x <- newName "x"; return (LamE [VarP x] (LitE (StringL "hello world"))))

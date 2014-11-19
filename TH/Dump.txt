@@ -1,0 +1,89 @@
+HelloYesod.hs:(19,22)-(21,2): Splicing expression
+    "\n\
+    \/ HomeR GET"
+  ======>
+    [Yesod.Routes.TH.Types.ResourceLeaf
+       (Yesod.Routes.TH.Types.Resource
+          "HomeR"
+          []
+          (Yesod.Routes.TH.Types.Methods Nothing ["GET"])
+          []
+          True)]
+HelloYesod.hs:1:1: Splicing declarations
+    mkYesod
+      "HelloWorld"
+      ([Yesod.Routes.TH.Types.ResourceLeaf
+          (Yesod.Routes.TH.Types.Resource
+             "HomeR"
+             []
+             (Yesod.Routes.TH.Types.Methods Nothing ["GET"])
+             []
+             True)])
+  ======>
+    HelloYesod.hs:(19,1)-(21,2)
+    instance ParseRoute HelloWorld where
+      parseRoute
+        = \ f_acEP x_acEQ -> f_acEP GHC.Tuple.() x_acEQ ::
+            forall a_acER.
+            (()
+             -> ([Data.Text.Internal.Text],
+                 [(Data.Text.Internal.Text, Data.Text.Internal.Text)])
+                -> Maybe (Route a_acER))
+            -> ([Data.Text.Internal.Text],
+                [(Data.Text.Internal.Text, Data.Text.Internal.Text)])
+               -> Maybe (Route a_acER)
+          helper_acEO
+        where
+            helper_acEO env9698_acEJ req9698_acEK
+              = helper9698_acEL (fst req9698_acEK)
+              where
+                  helper9698_acEL GHC.Types.[]
+                    = \ _ _ x_acEN _ -> x_acEN
+                        (error "mdsGetHandler") env9698_acEJ (Just HomeR) req9698_acEK
+                  helper9698_acEL _
+                    = \ _ _ x_acEM _ -> x_acEM
+                        (error "mds404") env9698_acEJ Nothing req9698_acEK
+    instance RenderRoute HelloWorld where
+      data Route HelloWorld
+        = HomeR
+        deriving (Show, Eq, Read)
+      renderRoute HomeR = ([], [])
+    instance RouteAttrs HelloWorld where
+      routeAttrs (HomeR {})
+        = containers-0.5.5.1:Data.Set.Base.fromList []
+    resourcesHelloWorld :: [Yesod.Routes.TH.Types.ResourceTree String]
+    resourcesHelloWorld
+      = [Yesod.Routes.TH.Types.ResourceLeaf
+           (Yesod.Routes.TH.Types.Resource
+              "HomeR"
+              []
+              (Yesod.Routes.TH.Types.Methods Nothing ["GET"])
+              []
+              True)]
+    type Handler = HandlerT HelloWorld IO
+    type Widget = WidgetT HelloWorld IO GHC.Tuple.()
+    instance YesodDispatch HelloWorld where
+      yesodDispatch env4989_acEG req4989_acEH
+        = helper4989_acEI (Network.Wai.Internal.pathInfo req4989_acEH)
+        where
+            helper4989_acEI GHC.Types.[]
+              = case Network.Wai.Internal.requestMethod req4989_acEH of {
+                  "GET"
+                    -> yesodRunner getHomeR env4989_acEG (Just HomeR) req4989_acEH
+                  _ -> yesodRunner
+                         (badMethod >> (return GHC.Tuple.()))
+                         env4989_acEG
+                         (Just HomeR)
+                         req4989_acEH }
+            helper4989_acEI _
+              = yesodRunner
+                  (notFound >> (return GHC.Tuple.()))
+                  env4989_acEG
+                  Nothing
+                  req4989_acEH
+HelloYesod.hs:30:26-48: Splicing expression
+    "Hello World!"
+  ======>
+    (asWidgetT . toWidget)
+      ((Text.Blaze.Internal.preEscapedText . Data.Text.pack)
+         "Hello World!")
